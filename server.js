@@ -1,27 +1,59 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { MongoClient } = require('mongodb');
+const { google } = require('googleapis');
+const ExcelJS = require('exceljs');
 const path = require('path');
+const stream = require('stream');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MONGO_URI = 'mongodb+srv://kasthurinaresh1:UxTF9K42WAmfkJJJ@cluster0.mongodb.net/pizza-excel?retryWrites=true&w=majority'; // Replace with your MongoDB URI
 
 app.use(bodyParser.json());
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const client = new MongoClient(MONGO_URI);
+// Google Drive setup
+const auth = new google.auth.GoogleAuth({
+  credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
+  scopes: ['https://www.googleapis.com/auth/drive'],
+});
 
-async function connectToMongo() {
-  try {
-    await client.connect();
-    console.log('Connected to MongoDB');
-  } catch (error) {
-    console.error('Failed to connect to MongoDB:', error);
-    throw error;
+const drive = google.drive({ version: 'v3', auth });
+const fileId = 'YOUR_FILE_ID'; // Replace with the file ID of customers.xlsx
+const folderId = '1T1eokYrHzdC3-F84GrUgyYZK9OuX5Kzo'; // Folder ID of Pizza Excel Data
+
+// Function to download the Excel file from Google Drive
+async function downloadExcelFile() {
+  const response = await drive.files.get(
+    { fileId, alt: 'media' },
+    { responseType: 'stream' }
+  );
+
+  const chunks = [];
+  for await (const chunk of response.data) {
+    chunks.push(chunk);
   }
+  const buffer = Buffer.concat(chunks);
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  return workbook;
+}
+
+// Function to upload the updated Excel file to Google Drive
+async function uploadExcelFile(workbook) {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const bufferStream = new stream.PassThrough();
+  bufferStream.end(buffer);
+
+  await drive.files.update({
+    fileId,
+    media: {
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      body: bufferStream,
+    },
+  });
 }
 
 app.post('/submit', async (req, res) => {
@@ -40,21 +72,24 @@ app.post('/submit', async (req, res) => {
   }
 
   try {
-    const db = client.db('pizza-excel');
-    const collection = db.collection('customers');
-    await collection.insertOne({ name, email, phone });
-    console.log('Customer added to MongoDB:', { name, email, phone });
+    // Download the existing Excel file
+    const workbook = await downloadExcelFile();
+    const sheet = workbook.getWorksheet(1);
+
+    // Append the new submission
+    sheet.addRow({ name, email, phone });
+    console.log('Customer added to Excel:', { name, email, phone });
+
+    // Upload the updated Excel file back to Google Drive
+    await uploadExcelFile(workbook);
 
     res.json({ success: true, name });
   } catch (error) {
-    console.error('Failed to save to MongoDB:', error);
+    console.error('Failed to update Excel file:', error);
     return res.status(500).json({ success: false, error: 'Failed to save data' });
   }
 });
 
-(async () => {
-  await connectToMongo();
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running at http://localhost:${PORT}`);
-  });
-})();
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+});

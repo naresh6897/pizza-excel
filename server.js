@@ -1,11 +1,13 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const cors = require('cors');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
+app.use(cors()); // Enable CORS for all routes
 app.use(express.static(path.join(__dirname, 'public')));
 
 // In-memory storage for customer entries (temporary for free hosting)

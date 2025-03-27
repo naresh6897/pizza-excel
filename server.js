@@ -1,17 +1,28 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const { MongoClient } = require('mongodb');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const MONGO_URI = 'mongodb+srv://your-username:your-password@cluster0.mongodb.net/pizza-excel?retryWrites=true&w=majority'; // Replace with your MongoDB URI
 
 app.use(bodyParser.json());
-app.use(cors()); // Enable CORS for all routes
+app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory storage for customer entries (temporary for free hosting)
-const customers = [];
+const client = new MongoClient(MONGO_URI);
+
+async function connectToMongo() {
+  try {
+    await client.connect();
+    console.log('Connected to MongoDB');
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error);
+    throw error;
+  }
+}
 
 app.post('/submit', async (req, res) => {
   const { name, email, phone } = req.body;
@@ -29,17 +40,21 @@ app.post('/submit', async (req, res) => {
   }
 
   try {
-    customers.push({ name, email, phone });
-    console.log('Customer added to in-memory storage:', { name, email, phone });
-    console.log('Total customers:', customers.length);
+    const db = client.db('pizza-excel');
+    const collection = db.collection('customers');
+    await collection.insertOne({ name, email, phone });
+    console.log('Customer added to MongoDB:', { name, email, phone });
 
     res.json({ success: true, name });
   } catch (error) {
-    console.error('Failed to save data:', error);
+    console.error('Failed to save to MongoDB:', error);
     return res.status(500).json({ success: false, error: 'Failed to save data' });
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+(async () => {
+  await connectToMongo();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+  });
+})();

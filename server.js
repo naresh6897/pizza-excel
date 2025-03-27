@@ -6,7 +6,7 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MONGO_URI = 'mongodb+srv://kasthurinareshkumar1:UxTF9K42WAmfkJJJ@cluster0.mongodb.net/pizza-excel?retryWrites=true&w=majority'; // Replace with your MongoDB URI
+const MONGO_URI = 'mongodb+srv://kasthurinaresh1:UxTF9K42WAmfkJJJ@cluster0.mongodb.net/pizza-excel?retryWrites=true&w=majority'; // Replace with your MongoDB URI
 
 app.use(bodyParser.json());
 app.use(cors());
